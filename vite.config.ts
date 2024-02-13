@@ -26,7 +26,7 @@ const mdxOptions: any = {
 // https://vitejs.dev/config/
 export default defineConfig({
   /* plugins: [{ enforce: "pre", ...mdx(mdxOptions) }, react()], */
-  base: "optics-talk",
+  base: "/optics-talk",
   plugins: [
     { enforce: "pre", ...mdx(mdxOptions) },
     Unfonts({

@@ -1,0 +1,1040 @@
+import { Speak } from "../components/modes";
+import { Slide } from "../components/slide";
+import { Sample01 } from "../samples/sample01";
+import { Sample03 } from "../samples/sample03";
+import { Sample04 } from "../samples/sample04";
+import { Sample05 } from "../samples/sample05";
+import { Sample06 } from "../samples/sample06";
+import { Sample07 } from "../samples/sample07";
+
+<Slide>
+
+# Functional Optics for State Management and Beyond
+
+## Who I am
+
+- Juliette; she/her
+- graduated in both mathematics and linguistics
+- poetry
+- volunteer at a trans organization for financial litteracy, helping the team to organize their collaborative tools
+- main languages: lua, go, typescript
+- sometimes: haskell, c, c++
+- last position: full stack web developper for a research group at l'UQAM
+- currently work at:
+
+</Slide>
+
+<Slide>![hire-me](/hire-me.jpg)</Slide>
+
+<Slide>
+
+## The problem
+
+<CH.Code>
+```jsx
+import { useCallback, useState } from "react";
+
+const init = {
+  lolly: 3,
+};
+
+export function Component({ target }) {
+  const [state, setState] = useState(init);
+  const disabled = state.lolly === 3;
+  const clickHandler = useCallback(
+    () => setState({ ...state, lolly: target }),
+    [state, target]
+  );
+  return (
+    <button disabled={disabled} onClick={clickHandler}>
+      {target}
+    </button>
+  );
+}
+```
+</CH.Code>
+
+- dot dot dot hell
+- implicit coupling
+- lack of intentionality
+
+</Slide>
+
+<Slide>
+
+## A First Lens
+
+<CH.Code>
+```jsx
+import { useCallback, useState } from "react";
+import { Sample } from "../components/sample";
+
+const init = {
+  lolly: 3,
+};
+
+// abstracts the concern of updating part of the structure
+function prop(key) {
+  return {
+    get: (whole) => whole[key], // view
+    // curried function
+    set: (part) => (whole) => ({ ...whole, [key]: part }), // update
+  };
+}
+
+const lollyProp = prop("lolly");
+
+export function Component({ target }) {
+  const [state, setState] = useState(init);
+  const disabled = lollyProp.get(state) === target;
+  const clickHandler = useCallback(
+    // takes a callback
+    () => setState(lollyProp.set(target)),
+    [target]
+  );
+  return (
+    <>
+      <div>{JSON.stringify(state)}</div>
+      <button disabled={disabled} onClick={clickHandler}>
+        {target}
+      </button>
+    </>
+  );
+}
+
+export function Sample01() {
+  return (
+    <Sample>
+      <Component target={5} />
+    </Sample>
+  );
+}
+```
+</CH.Code>
+
+<Sample01 />
+
+- abstracts the concern of updating part of the structure
+- curried function
+- useState takes a callback
+- explicit coupling
+- the focus
+- product type
+
+</Slide>
+
+<Slide>
+
+## Axioms of a Lens
+
+<CH.Code>
+```jsx
+function prop(key) {
+  return {
+    get: (whole) => whole[key],
+    set: (part) => (whole) => ({ ...whole, [key]: part }),
+  };
+}
+```
+</CH.Code>
+
+- **get after set**: `l.get(l.set(a)(s)) === a`
+- **get after set**: `l.set(l.get(s))(s) === s`
+- **set after set**: `l.set(b)(l.set(a)(s)) === l.set(b)(s)`
+  - **idempotency**: `l.set(a)(l.set(a)(s)) === l.set(a)(s)`
+
+- great to write tests (property-based testing)
+
+</Slide>
+
+<Slide>
+
+## Nested State
+
+<CH.Code>
+```jsx
+import { useCallback, useState } from "react";
+
+const init = {
+  nest: {
+    lolly: 3,
+  },
+};
+
+export function Component({ target }) {
+  const [state, setState] = useState(init);
+  const disabled = state.nest.lolly === 3;
+  const clickHandler = useCallback(
+    () => setState({ ...state, nest: { ...state.nest, value: target } }),
+    [state, target]
+  );
+  return (
+    <button disabled={disabled} onClick={clickHandler}>
+      {target}
+    </button>
+  );
+}
+```
+</CH.Code>
+
+</Slide>
+
+<Slide>
+
+## Composition
+
+<CH.Code>
+```jsx
+import { useCallback, useState } from "react";
+import { Sample } from "../components/sample";
+
+function prop(key) {
+  return {
+    get: (whole) => whole[key],
+    set: (part) => (whole) => ({ ...whole, [key]: part }),
+  };
+}
+
+function compose(a, b) {
+  return {
+    get: (whole) => b.get(a.get(whole)),
+    set: (part) => (whole) => a.set(b.set(part)(a.get(whole)))(whole),
+  };
+}
+
+const lollyProp = compose(prop("nest"), prop("lolly"));
+
+const init = {
+  nest: {
+    lolly: 3,
+  },
+};
+
+function Component({ target }) {
+  const [state, setState] = useState(init);
+  const clickHandler = useCallback(
+    () => setState(lollyProp.set(target)),
+    [target]
+  );
+  return (
+    <>
+      <div>{JSON.stringify(state)}</div>
+      <button disabled={lollyProp.get(state) === target} onClick={clickHandler}>
+        {target}
+      </button>
+    </>
+  );
+}
+
+export function Sample03() {
+  return (
+    <Sample>
+      <Component target={5} />
+    </Sample>
+  );
+}
+
+````
+</CH.Code>
+
+<Sample03 />
+
+- If all composees respect lens laws, then so does the composed.
+- lens &middot; lens = lens
+
+</Slide>
+
+<Slide>
+
+## Assoc
+
+<CH.Code>
+```jsx
+import { useCallback, useState } from "react";
+import { Sample } from "../components/sample";
+
+function lens(get, set) {
+  return {
+    get,
+    set,
+    assoc: (f) => (whole) => set(f(get(whole)))(whole), // modify, over, map
+  };
+}
+
+function prop(key) {
+  return lens(
+    (whole) => whole[key],
+    (part) => (state) => ({ ...state, [key]: part })
+  );
+}
+
+function compose(a, b) {
+  return lens(
+    (whole) => b.get(a.get(whole)),
+    (part) => (whole) => a.set(b.set(part)(a.get(whole)))(whole)
+  );
+}
+
+const lollyProp = compose(prop("nest"), prop("lolly"));
+const inc = (x) => x + 1;
+
+const init = {
+  nest: {
+    lolly: 3,
+  },
+};
+
+function Component() {
+  const [state, setState] = useState(init);
+  const clickHandler = useCallback(() => setState(lollyProp.assoc(inc)), []);
+  return (
+    <>
+      <div>{JSON.stringify(state)}</div>
+      <button onClick={clickHandler}>+</button>
+    </>
+  );
+}
+
+export function Sample04() {
+  return (
+    <Sample>
+      <Component />
+    </Sample>
+  );
+}
+````
+
+</CH.Code>
+
+<Sample04 />
+
+- assoc and set can be derived from one another (will not true for all optics)
+
+</Slide>
+
+<Slide>
+
+## Element lens
+
+<CH.Code>
+```jsx
+import { useCallback, useMemo, useState } from "react";
+import { Sample } from "../components/sample";
+
+function lens(get, set) {
+  return {
+    get,
+    set,
+    assoc: (f) => (whole) => set(f(get(whole)))(whole),
+  };
+}
+
+function compose(a, b) {
+  return lens(
+    (whole) => b.get(a.get(whole)),
+    (part) => (whole) => a.set(b.set(part)(a.get(whole)))(whole)
+  );
+}
+
+function element(key) {
+  return lens(
+    (whole) => whole.includes(key),
+    (part) => (whole) => part ? [...whole, key] : whole.filter((x) => x !== key)
+  );
+}
+
+function prop(key) {
+  return lens(
+    (whole) => whole[key],
+    (part) => (s) => ({ ...s, [key]: part })
+  );
+}
+
+const tagsProp = prop("tags");
+const negate = (x) => !x;
+
+const init = { tags: ["emerald", "flaming", "spring"] };
+
+function TagToggler({ tag }) {
+  const tagLens = useMemo(() => compose(tagsProp, element(tag)), [tag]);
+  const [state, setState] = useState(init);
+  const clickHandler = useCallback(() => {
+    return setState(tagLens.assoc(negate));
+  }, [tagLens]);
+  return (
+    <>
+      <div>{JSON.stringify(state)}</div>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "row",
+          gap: 5,
+        }}
+      >
+      <input
+        type="checkbox"
+        checked={tagLens.get(state)}
+        onChange={clickHandler}
+      />
+      <div>{tag}</div>
+    </div>
+  </>
+  );
+}
+
+export function Sample05() {
+  return (
+    <Sample>
+      <TagToggler tag="flaming" />
+    </Sample>
+  );
+}
+  ```
+</CH.Code>
+
+<Sample05 />
+
+- API wants a `string[]`
+- component wants a `boolean`
+- parts do not need to reflect the constructor
+- is it a lens? (equivalence vs equality)
+  - **set after set**: `l.set(b)(l.set(a)(s)) === l.set(b)(s)`
+
+</Slide>
+
+<Slide>
+
+## Iso (isomorphism)
+
+<CH.Code>
+```jsx
+import { useCallback, useState } from "react";
+import { Sample } from "../components/sample";
+
+const init = {
+  temperature: 100,
+};
+
+function lens(get, set) {
+  return {
+    get,
+    set,
+    assoc: (f) => (whole) => set(f(get(whole)))(whole),
+  };
+}
+
+function compose(a, b) {
+  return lens(
+    (whole) => b.get(a.get(whole)),
+    (part) => (whole) => a.set(b.set(part)(a.get(whole)))(whole)
+  );
+}
+
+function prop(key) {
+  return lens(
+    (whole) => whole[key],
+    (part) => (whole) => ({ ...whole, [key]: part })
+  );
+}
+
+function toFahrenheit() {
+  return lens(
+    (celsius) => (celsius * 9) / 5 + 32,
+    // getter method independent of second parameter (whole)
+    (fahrenheit) => (_celcius) => ((fahrenheit - 32) * 5) / 9
+  );
+}
+
+const fahrenheitProp = compose(prop("temperature"), toFahrenheit());
+const inc = (x) => x + 10;
+const dec = (x) => x - 10;
+
+function Temperature() {
+  const [state, setState] = useState(init);
+  const incHandler = useCallback(() => setState(fahrenheitProp.assoc(inc)), []);
+  const decHandler = useCallback(() => setState(fahrenheitProp.assoc(dec)), []);
+  return (
+    <>
+      <div>{JSON.stringify(state)}</div>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "row",
+          gap: 5,
+        }}
+      >
+        <button onClick={decHandler}>-</button>
+        <div>{fahrenheitProp.get(state)}</div>
+        <button onClick={incHandler}>+</button>
+      </div>
+    </>
+  ); }
+
+export function Sample06() {
+  return (
+    <Sample>
+      <Temperature />
+    </Sample>
+  );
+}
+  ```
+</CH.Code>
+
+<Sample06 />
+
+- getter method independent of second parameter
+- "part" has as much information as "whole"
+- application state in International System of Units (IS), API and GUI can be in any unit system
+  - Mars Climate Oberver
+  - On September 23, 1999, communication with the spacecraft was permanently lost as it went into orbital insertion.
+- composition:
+  - lens &middot; iso = lens
+  - iso &middot; lens = lens
+  - iso &middot; iso = iso
+
+</Slide>
+
+<Slide>
+
+## Parts
+
+<CH.Code>
+```jsx
+function parts(separator) {
+  return lens(
+    (whole) => whole.split(separator),
+    (part) => (_whole) => part.join(separator)
+  );
+}
+
+const words = parts(" ");
+const elems = parts("+");
+```
+</CH.Code>
+
+</Slide>
+
+<Slide>
+
+## Bool to int
+
+<CH.Code>
+```jsx
+function boolToInt() {
+  return lens(
+    (whole) => (whole ? 1 : 0),
+    (part) => (_whole) => part === 1
+  );
+}
+````
+
+- serialization, deserializtion (date)
+
+</CH.Code>
+
+</Slide>
+
+<Slide>
+
+## Prism
+
+<CH.Code>
+```jsx
+import { useCallback, useState } from "react";
+import { Sample } from "../components/sample";
+
+function prism(get, set) {
+  return {
+    get,
+    set,
+    assoc: (f) => (whole) => {
+      const r = get(whole);
+      if (r === undefined) return whole;
+      return set(whole, f(r));
+    },
+  };
+}
+
+const strToNum = prism(
+  (str) => {
+    const num = Number(str);
+    if (isNaN(num)) return undefined;
+    return num;
+  },
+  (_str, num) => String(num)
+);
+
+const init = 0;
+
+function Component() {
+  const [state, setState] = useState(init);
+  const [inputState, setInputState] = useState("");
+  const changeHandler = useCallback((e) => {
+    const value = e.target.value;
+    setInputState(value);
+    setState(strToNum.get(value));
+  }, []);
+  return (
+    <>
+      <div>{JSON.stringify(state) ?? "undefined"}</div>
+      <input type="String" value={inputState} onChange={changeHandler} />
+    </>
+  ); 
+}
+
+export function Sample07() {
+  return (
+    <Sample>
+      <Component />
+    </Sample>
+  );
+}
+  ```
+</CH.Code>
+
+- failure on read
+  - undefined, expection, tagged union
+- partial function
+- assoc might not fail, if you think of it as some sort of `map`
+- writing always succeed
+- sum type
+- getter method independent of second parameter
+- "part" has as much information as "whole"
+- iso is both a lens and a prism
+- composition:
+  - prism &middot; prism = prism
+  - prism &middot; iso = prism
+  - iso &middot; prism = prism
+
+<Sample07 />
+
+</Slide>
+
+<Slide>
+
+## Predicates
+
+<CH.Code>
+```jsx
+// predicate
+const isPositive = prism(
+  (whole) => (whole >= 0 ? whole : undefined),
+  (_whole, part) => part
+);
+
+// type guard
+const isNumber = prism(
+  (whole) => (typeof whole === "number" ? whole : undefined),
+  (_whole, part) => part
+);
+
+// validator
+struct({
+  x: strToNum,
+  y: isPositive,
+  z: isNumber,
+})
+
+````
+</CH.Code>
+
+- predicate vs filter
+- type guard
+- pattern matching
+- validator
+
+</Slide>
+
+<Slide>
+
+## Optional (Affine Fold)
+
+<CH.Code>
+```jsx
+function optional(get, set) {
+  return {
+    get,
+    set,
+    assoc: (f) => (whole) => {
+      const r = get(whole);
+      if (r === undefined) return whole;
+      return set(whole)(f(r));
+    },
+  };
+}
+
+function compose(a, b) {
+  return optional(
+    (whole) => {
+      const r = a.get(whole);
+      if (r === undefined) return undefined;
+      return b.get(r);
+    },
+    (part) => (whole) => {
+      const r = a.get(whole);
+      if (r === undefined) return whole;
+      return a.set(b.set(part)(r))(whole);
+    }
+  );
+}
+
+// index
+const at = (n) =>
+  optional(
+    (whole) => whole.at(n),
+    (whole, part) => {
+      const x = [...whole];
+      x[n] = part;
+      return x;
+    }
+  );
+````
+
+</CH.Code>
+
+- read can fail
+- write can fail
+  - exception, undefined, tagged union
+  - return same value
+  - derived form read error (no optics that can only fail on write)
+-  combinations
+  - lens &middot; prism = optional
+  - prism &middot; lens = optional
+  - optional &middot; optional = optional
+  - optional &middot; iso = optional
+
+</Slide>
+
+<Slide>
+
+### Other optics
+
+![class diagram](/class-diagram.png)
+
+- getters:
+  - number of cats
+- affine fold
+  - cat with the longest name
+- setters:
+  - assoc as a setter
+  - multiple updates
+    - close a popup, set the main item
+  - do they compose?
+- equivalence
+  - convenience (type inference)
+  - custom deep equality check
+  - lens with identity relation
+
+
+- multiple focus
+- fold
+- transversals
+  - name of all the cats starting with an 'm'
+  - map cannot de derived from setter
+    - set names to "cat"
+    - prepend names with "cat"
+
+- composition
+
+<CH.Code>
+```tsx
+const init = {
+  cats = [
+    {id: 32, name: "maramalade"},
+    {id: 18, name: "profunctor"},
+    {id: 343, name: "minou"}
+  ]
+}
+```
+
+</CH.Code>
+
+</Slide>
+<Slide>
+
+## Implementations
+
+### Lens as pattern
+
+- 10 LOC
+- separation of concern
+- handling convertions between structures
+
+### Older stuff
+
+- pre typescript era
+
+  - runtime is easier to implement than typing
+  - difficult to retrofit type good inference
+
+- [ramda](https://ramdajs.com/) (lens only)
+
+#### Inspiration
+
+- [grammarly/focal: Program user interfaces the FRP way.](https://github.com/grammarly/focal)
+  - tied to react and rx (not as useful since hooks)
+- [calmm-js/partial.lenses](https://github.com/calmm-js/partial.lenses#use-of-undefined) old (pre-ts), but lots of stuff
+- [cyclejs](https://cycle.js.org/)
+
+### Modern libraries
+
+- [optics-ts](https://akheron.github.io/optics-ts/reference-mc/)
+  - heavy on compiler
+  - some bugs in type inference (false positives, no false negatives, infinite cycles)
+- [gcanti/monocle-ts: Functional optics: a (partial) porting of Scala monocle](https://github.com/gcanti/monocle-ts)
+  - stable/unmaitained
+- [fp-ts/optic: A porting of zio-optics to TypeScript](https://github.com/fp-ts/optic)
+  - same author as monocle
+  - no folds/transversals
+- [io-ts](https://gcanti.github.io/io-ts/)
+  - same author as monocle
+  - prism library
+  - somewhat an alternative to zod
+
+</Slide>
+
+<Slide>
+
+### React Integrations
+
+- fits with react model (immutability)
+- plain hooks
+- jotai
+  - [jotaijs/jotai-optics: Jotai integration library for optics-ts](https://github.com/jotaijs/jotai-optics)
+
+</Slide>
+<Slide>
+
+#### Zustand
+
+- Docs refers to ramda and optics-ts as fancy setters
+- [Practice with no store actions](https://docs.pmnd.rs/zustand/guides/practice-with-no-store-actions)
+
+<CH.Code>
+```jsx
+/* eslint-disable react-hooks/rules-of-hooks */
+import { useCallback } from "react";
+import * as O from "optics-ts";
+import { StoreApi, UseBoundStore } from "zustand";
+
+// 
+
+export function createHooks<IState>(
+  useBoundStore: UseBoundStore<StoreApi<IState>>
+) {
+  return {
+    get: function <A>(
+      o:
+        | O.Lens<IState, any, A>
+        | O.Iso<IState, any, A>
+        | O.Equivalence<IState, any, A>
+    ) {
+      return useBoundStore(O.get(o));
+    },
+    preview: function <A>(
+      o: O.Prism<IState, any, A> | O.Traversal<IState, any, A>
+    ) {
+      return useBoundStore(O.preview(o));
+    },
+    collect: function <A>(
+      o:
+        | O.Prism<IState, any, A>
+        | O.Traversal<IState, any, A>
+        | O.Fold<IState, A>
+    ) {
+      return useBoundStore(O.collect(o));
+    },
+
+    set: function <A>(
+      o:
+        | O.Lens<IState, any, A>
+        | O.Iso<IState, any, A>
+        | O.Prism<IState, any, A>
+        | O.Traversal<IState, any, A>
+        | O.Equivalence<IState, any, A>
+        | O.Setter<IState, any, A>
+    ) {
+      return useCallback(
+        (value: A) => useBoundStore.setState(O.set(o)(value)),
+        [o]
+      );
+    },
+    setValue: function <A>(
+      o:
+        | O.Lens<IState, any, A>
+        | O.Iso<IState, any, A>
+        | O.Prism<IState, any, A>
+        | O.Traversal<IState, any, A>
+        | O.Equivalence<IState, any, A>
+        | O.Setter<IState, any, A>,
+      value: A
+    ) {
+      return useCallback(
+        () => useBoundStore.setState(O.set(o)(value)),
+        [o, value]
+      );
+    },
+    modify: function <A>(
+      o:
+        | O.Lens<IState, any, A>
+        | O.Iso<IState, any, A>
+        | O.Prism<IState, any, A>
+        | O.Traversal<IState, any, A>
+        | O.Equivalence<IState, any, A>,
+      f: (a: A) => A
+    ) {
+      return useCallback(() => useBoundStore.setState(O.modify(o)(f)), [o, f]);
+    },
+    modifyCb: function <A>(
+      o:
+        | O.Lens<IState, any, A>
+        | O.Iso<IState, any, A>
+        | O.Prism<IState, any, A>
+        | O.Traversal<IState, any, A>
+        | O.Equivalence<IState, any, A>
+    ) {
+      return useCallback(
+        (f: (a: A) => A) => useBoundStore.setState(O.modify(o)(f)),
+        [o]
+      );
+    },
+    remove: function <A>(
+      o: O.Prism<IState, any, A> | O.Traversal<IState, any, A>
+    ) {
+      return useCallback(() => useBoundStore.setState(O.remove(o)), [o]);
+    },
+
+    lens: function <A>(
+      o:
+        | O.Lens<IState, any, A>
+        | O.Iso<IState, any, A>
+        | O.Equivalence<IState, any, A>
+    ) {
+      const value = useBoundStore(O.get(o));
+      const setValue = useCallback(
+        (value: A | undefined) => useBoundStore.setState(O.set(o)(value)),
+        [o]
+      );
+      return [value, setValue] as const;
+    },
+    lensValue: function <A>(
+      o:
+        | O.Lens<IState, any, A>
+        | O.Iso<IState, any, A>
+        | O.Equivalence<IState, any, A>,
+      value: A | undefined
+    ) {
+      const value_ = useBoundStore(O.get(o));
+      const setValue = useCallback(
+        () => useBoundStore.setState(O.set(o)(value)),
+        [o, value]
+      );
+      return [value_, setValue] as const;
+    },
+    opt: function <A>(
+      o: O.Prism<IState, any, A> | O.Traversal<IState, any, A>
+    ) {
+      const value = useBoundStore(O.preview(o));
+      const setValue = useCallback(
+        (value: A | undefined) => useBoundStore.setState(O.set(o)(value)),
+        [o]
+      );
+      return [value, setValue] as const;
+    },
+    optValue: function <A>(
+      o: O.Prism<IState, any, A> | O.Traversal<IState, any, A>,
+      value: A | undefined
+    ) {
+      const value_ = useBoundStore(O.preview(o));
+      const setValue = useCallback(
+        () => useBoundStore.setState(O.set(o)(value)),
+        [o, value]
+      );
+      return [value_, setValue] as const;
+    },
+  };
+}
+````
+</CH.Code>
+
+</Slide>
+
+<Slide>
+
+#### Zustand
+
+<CH.Code>
+```jsx
+import { optic } from "optics-ts";
+import { createHooks } from "./stores";
+import { create } from "zustand";
+
+export interface ISlide {
+  ref: React.RefObject<HTMLDivElement>;
+}
+
+export interface IState {
+  slide: number;
+  slides: ISlide[];
+}
+
+export const state = optic<IState>();
+
+export const initSamples = {};
+
+export const init: IState = {
+  slide: 0,
+  slides: [],
+};
+
+const useBoundStore = create(() => init);
+export const useMainStore = createHooks(useBoundStore);
+````
+
+</CH.Code>
+
+</Slide>
+
+<Slide>
+
+## What are the alternatives (front-end)
+
+### Proxy solutions
+
+- tools are easier to understand
+- workflow is implicit
+- for simple use cases both ways seem comparable
+- only equivalent to simple cases
+
+- standalone: immer
+- state management: valtio
+- framework: solidjs
+
+## What are the complements
+
+- spatial vs temporal (observable, finite state machine)
+
+- Konami Code
+
+![Konami Code](/Konami_Code.svg)
+
+- async reactivity: rxjs
+- state machine: xstate
+
+</Slide>
+
+<Slide>
+
+## Concluding remarks
+
+- polymorphism
+- testability
+- try, tested theorized
+- shared accross languages and frameworks
+
+</Slide>
+
+- injectivity (prism, iso)
+- sirens
+
+- samples (other optics)

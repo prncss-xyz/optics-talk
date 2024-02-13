@@ -1,0 +1,6 @@
+.markdown > *:nth-child(2) {
+  margin-top: 0px;
+}
+.markdown > *:last-child {
+  margin-bottom: 0px;
+}

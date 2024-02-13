@@ -1,0 +1,49 @@
+{
+  "name": "-lens-talk",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "prepare": "panda codegen",
+    "dev": "run-p dev:*",
+    "dev:panda": "vite",
+    "dev:vite": "panda --watch",
+    "build": "tsc && vite build",
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "test": "vitest",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@code-hike/mdx": "^0.9.0",
+    "@fontsource-variable/open-sans": "^5.0.22",
+    "@mdx-js/mdx": "2",
+    "@mdx-js/rollup": "^3.0.0",
+    "@tanstack/react-store": "^0.3.0",
+    "@tanstack/store": "^0.3.0",
+    "@vitejs/plugin-react": "^4.2.1",
+    "mermaid": "^10.6.1",
+    "optics-ts": "^2.4.1",
+    "ramda": "^0.29.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "rehype-mermaid": "^2.0.1",
+    "vitest": "^1.2.0",
+    "zustand": "^4.5.0"
+  },
+  "devDependencies": {
+    "@pandacss/dev": "^0.26.2",
+    "@types/mdx": "^2.0.10",
+    "@types/ramda": "^0.29.9",
+    "@types/react": "^18.2.43",
+    "@types/react-dom": "^18.2.17",
+    "@typescript-eslint/eslint-plugin": "^6.14.0",
+    "@typescript-eslint/parser": "^6.14.0",
+    "eslint": "^8.55.0",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "eslint-plugin-react-refresh": "^0.4.5",
+    "npm-run-all": "^4.1.5",
+    "typescript": "^5.2.2",
+    "unplugin-fonts": "^1.1.1",
+    "vite": "^5.0.8"
+  }
+}
